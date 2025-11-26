@@ -1,35 +1,9 @@
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:2.0.21")
-    }
-}
-
 plugins {
-    application
+    id("com.android.application") version "8.7.2" apply false
+    id("org.jetbrains.kotlin.android") version "2.0.21" apply false
+    id("org.jetbrains.kotlin.plugin.compose") version "2.0.21" apply false
 }
 
-apply(plugin = "org.jetbrains.kotlin.jvm")
-
-repositories {
-    mavenCentral()
-}
-
-dependencies {
-    implementation(kotlin("stdlib"))
-    testImplementation(kotlin("test"))
-}
-
-kotlin {
-    jvmToolchain(17)
-}
-
-application {
-    mainClass = "com.localai.Phase1AppKt"
-}
-
-tasks.test {
-    useJUnitPlatform()
+tasks.register("clean", Delete::class) {
+    delete(rootProject.buildDir)
 }

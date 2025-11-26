@@ -26,6 +26,31 @@ fun main() {
         println("- ${flow.flowName}: ${flow.description}")
         flow.screens.forEach { screen -> println("  • $screen") }
     }
+
+    val phase2 = Phase2Roadmap.definitions()
+    println("\nPhase 2: Model Strategy & Packaging Rules")
+    println("Supported formats and tiers:")
+    phase2.modelStrategy.formats.forEach { format ->
+        println("- ${format.name}: optimized for ${format.optimizedFor.joinToString()}")
+        format.recommendedTiers.forEach { tier ->
+            println("  • ${tier.tierName}: ${tier.parameters} params, ${tier.expectedLatency}, ${tier.storageFootprint}")
+        }
+    }
+    println("\nPackaging rules:")
+    phase2.packagingRules.bundledModels.forEach { model ->
+        println("- Bundled: ${model.id} (${model.format}) → ${model.deliveryMode.description}")
+    }
+    phase2.packagingRules.onDemandModels.forEach { model ->
+        println("- Downloaded: ${model.id} (${model.format}) → ${model.deliveryMode.description}")
+    }
+    println("Storage plan: ${phase2.packagingRules.storagePlan.appAssetsPath}, ${phase2.packagingRules.storagePlan.onDemandPath}, ${phase2.packagingRules.storagePlan.userImportPath}")
+    println("Integrity checks: ${phase2.packagingRules.integrityChecks.joinToString()}")
+
+    println("\nImport/export policy:")
+    println("Allowed formats: ${phase2.importExportPolicy.allowedFormats.joinToString()}")
+    phase2.importExportPolicy.validationSteps.forEach { step -> println("- $step") }
+    println("Licensing rules: ${phase2.importExportPolicy.licensingRules.joinToString()}")
+    println("Attribution stored in ${phase2.importExportPolicy.attributionStorage.manifestFile}")
 }
 
 /**
@@ -211,3 +236,176 @@ data class ComposeFlow(
     val description: String,
     val screens: List<String>
 )
+
+/**
+ * Phase 2 roadmap capturing model strategy, packaging, and import/export plans.
+ */
+data class Phase2Roadmap(
+    val modelStrategy: ModelFormatStrategy,
+    val packagingRules: PackagingRuleSet,
+    val importExportPolicy: ImportExportPolicy
+) {
+    companion object {
+        fun definitions(): Phase2Roadmap = Phase2Roadmap(
+            modelStrategy = ModelFormatStrategy(
+                formats = listOf(
+                    ModelFormatSpec(
+                        name = "GGUF",
+                        optimizedFor = listOf("CPU-first chat", "Quantized long-context"),
+                        recommendedTiers = listOf(
+                            ModelSizeTier(
+                                tierName = "Entry", parameters = "3B-4B", expectedLatency = "<2.5s first token",
+                                storageFootprint = "~1.5–2GB quantized"
+                            ),
+                            ModelSizeTier(
+                                tierName = "Balanced", parameters = "7B", expectedLatency = "~1.5s first token",
+                                storageFootprint = "~3.5–4GB quantized"
+                            )
+                        )
+                    ),
+                    ModelFormatSpec(
+                        name = "TFLite",
+                        optimizedFor = listOf("On-device speech", "Low-latency mobile vision"),
+                        recommendedTiers = listOf(
+                            ModelSizeTier(
+                                tierName = "Mobile", parameters = "Base encoder/decoder", expectedLatency = "<1s streaming",
+                                storageFootprint = "<500MB with 8-bit quantization"
+                            )
+                        )
+                    ),
+                    ModelFormatSpec(
+                        name = "ONNX",
+                        optimizedFor = listOf("GPU/NNAPI accelerated chat", "Interop with desktop exports"),
+                        recommendedTiers = listOf(
+                            ModelSizeTier(
+                                tierName = "Performance", parameters = "7B-13B", expectedLatency = "<1s first token on high-tier devices",
+                                storageFootprint = "6–10GB with weights split"
+                            )
+                        )
+                    )
+                )
+            ),
+            packagingRules = PackagingRuleSet(
+                bundledModels = listOf(
+                    PackagedModel(
+                        id = "starter-chat-gguf", format = "GGUF", deliveryMode = DeliveryMode.APK_ASSET,
+                        storageLocation = "assets/models/starter_chat.gguf",
+                        rationale = "Guarantees offline chat immediately after install"
+                    ),
+                    PackagedModel(
+                        id = "speech-base-tflite", format = "TFLite", deliveryMode = DeliveryMode.APK_ASSET,
+                        storageLocation = "assets/models/speech_base.tflite",
+                        rationale = "Keeps speech capture responsive without downloads"
+                    )
+                ),
+                onDemandModels = listOf(
+                    PackagedModel(
+                        id = "balanced-chat-gguf", format = "GGUF", deliveryMode = DeliveryMode.PLAY_ASSET_DELIVERY,
+                        storageLocation = "pad/models/balanced_chat.gguf",
+                        rationale = "Reduces base APK size while keeping mid-tier option available"
+                    ),
+                    PackagedModel(
+                        id = "performance-chat-onnx", format = "ONNX", deliveryMode = DeliveryMode.ON_DEMAND_DOWNLOAD,
+                        storageLocation = "downloads/models/performance_chat.onnx",
+                        rationale = "Large footprint suitable only for capable devices"
+                    )
+                ),
+                storagePlan = StoragePlan(
+                    appAssetsPath = "assets/models/", onDemandPath = "Android/data/com.localai/files/models/",
+                    userImportPath = "Documents/LocalAI/Imports/", backupPolicy = "Exclude model blobs from cloud backups"
+                ),
+                integrityChecks = listOf(
+                    "SHA-256 checksum verification post-download",
+                    "Signature metadata for first-party bundles",
+                    "Periodic re-hash on app updates and before inference"
+                )
+            ),
+            importExportPolicy = ImportExportPolicy(
+                allowedFormats = listOf(".gguf", ".onnx", ".tflite"),
+                validationSteps = listOf(
+                    "Confirm extension and magic header matches expected format",
+                    "Validate model size against declared tier and available disk",
+                    "Store per-file checksum and model provenance",
+                    "Run dry-run load to ensure operators are supported before activation"
+                ),
+                licensingRules = listOf(
+                    "Require user acknowledgement for third-party models during import",
+                    "Persist license URL/text alongside model metadata",
+                    "Block export of models marked as non-redistributable"
+                ),
+                attributionStorage = AttributionStorage(
+                    manifestFile = "metadata/model_manifest.json",
+                    requiredFields = listOf("name", "license", "source", "checksum", "format"),
+                    retention = "Retain entries for removed models for 30 days for auditability"
+                )
+            )
+        )
+    }
+}
+
+/** Model formats and their recommended device tiers. */
+data class ModelFormatStrategy(
+    val formats: List<ModelFormatSpec>
+)
+
+/** Description of a model format. */
+data class ModelFormatSpec(
+    val name: String,
+    val optimizedFor: List<String>,
+    val recommendedTiers: List<ModelSizeTier>
+)
+
+/** Recommended size tier for a device class. */
+data class ModelSizeTier(
+    val tierName: String,
+    val parameters: String,
+    val expectedLatency: String,
+    val storageFootprint: String
+)
+
+/** Packaging strategy for bundled and downloadable models. */
+data class PackagingRuleSet(
+    val bundledModels: List<PackagedModel>,
+    val onDemandModels: List<PackagedModel>,
+    val storagePlan: StoragePlan,
+    val integrityChecks: List<String>
+)
+
+/** One model and its delivery mode. */
+data class PackagedModel(
+    val id: String,
+    val format: String,
+    val deliveryMode: DeliveryMode,
+    val storageLocation: String,
+    val rationale: String
+)
+
+/** Storage locations for packaged models. */
+data class StoragePlan(
+    val appAssetsPath: String,
+    val onDemandPath: String,
+    val userImportPath: String,
+    val backupPolicy: String
+)
+
+/** Import/export constraints and licensing requirements. */
+data class ImportExportPolicy(
+    val allowedFormats: List<String>,
+    val validationSteps: List<String>,
+    val licensingRules: List<String>,
+    val attributionStorage: AttributionStorage
+)
+
+/** Location and schema for attribution metadata. */
+data class AttributionStorage(
+    val manifestFile: String,
+    val requiredFields: List<String>,
+    val retention: String
+)
+
+/** Delivery modes for different model tiers. */
+enum class DeliveryMode(val description: String) {
+    APK_ASSET("Ships inside APK for guaranteed offline availability"),
+    PLAY_ASSET_DELIVERY("Play Asset Delivery split to reduce base install size"),
+    ON_DEMAND_DOWNLOAD("Downloaded at runtime with checksum verification")
+}

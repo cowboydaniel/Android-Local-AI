@@ -6,9 +6,9 @@
 - [x] Sketch Jetpack Compose flows for home, model management, inference sessions, and settings.
 
 ## Phase 2: Model Strategy & Packaging Rules
-- [ ] Select supported model formats (e.g., GGUF, TFLite, ONNX) and size tiers for device classes.
-- [ ] Decide which model ships in the APK/asset delivery vs. on-demand download; document storage paths and integrity checks.
-- [ ] Plan import/export validation for user-supplied models and licensing/attribution tracking.
+- [x] Select supported model formats (e.g., GGUF, TFLite, ONNX) and size tiers for device classes.
+- [x] Decide which model ships in the APK/asset delivery vs. on-demand download; document storage paths and integrity checks.
+- [x] Plan import/export validation for user-supplied models and licensing/attribution tracking.
 
 ## Phase 3: System Architecture & Platform Choices
 - [ ] Finalize module boundaries: UI (Compose), domain/use-cases, runtime service, storage, networking, and diagnostics.

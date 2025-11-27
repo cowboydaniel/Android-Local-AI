@@ -114,7 +114,69 @@ case "$( uname )" in                #(
   NONSTOP* )        nonstop=true ;;
 esac
 
-CLASSPATH="\\\"\\\""
+WRAPPER_DIR=$APP_HOME/gradle/wrapper
+WRAPPER_JAR=$WRAPPER_DIR/gradle-wrapper.jar
+CLASSPATH=$WRAPPER_JAR
+FALLBACK_GRADLE=""
+
+download_wrapper_jar() {
+    if [ -s "$WRAPPER_JAR" ]; then
+        return
+    fi
+
+    rm -f "$WRAPPER_JAR"
+
+    properties_file=$APP_HOME/gradle/wrapper/gradle-wrapper.properties
+    if [ ! -f "$properties_file" ]; then
+        die "ERROR: Gradle wrapper properties not found at $properties_file"
+    fi
+
+    distributionUrl=$(sed -n 's/^distributionUrl=//p' "$properties_file" | tail -n 1)
+    if [ -z "$distributionUrl" ]; then
+        die "ERROR: distributionUrl not found in $properties_file"
+    fi
+
+    distributionUrl=$(printf '%s' "$distributionUrl" | sed 's#\\##g')
+    version=${distributionUrl##*/}
+    version=${version#gradle-}
+    version=${version%%-*}
+    tmp_dir=${TMPDIR:-/tmp}/gradle-wrapper-download
+    tmp_zip="$tmp_dir/gradle-${version}-bin.zip"
+    distribution_dir="$tmp_dir/unpacked/gradle-${version}"
+
+    mkdir -p "$WRAPPER_DIR" "$tmp_dir"
+    echo "Downloading Gradle distribution from: $distributionUrl"
+    if command -v curl >/dev/null 2>&1; then
+        if ! curl -fsSL "$distributionUrl" -o "$tmp_zip"; then
+            die "ERROR: Unable to download $distributionUrl"
+        fi
+    elif command -v wget >/dev/null 2>&1; then
+        if ! wget -q "$distributionUrl" -O "$tmp_zip"; then
+            die "ERROR: Unable to download $distributionUrl"
+        fi
+    else
+        die "ERROR: Neither curl nor wget is available to download Gradle wrapper."
+    fi
+
+    if [ ! -x "$distribution_dir/bin/gradle" ]; then
+        if ! unzip -qo "$tmp_zip" -d "$tmp_dir/unpacked"; then
+            die "ERROR: Unable to unpack Gradle distribution from $tmp_zip"
+        fi
+    fi
+
+    if [ -x "$distribution_dir/bin/gradle" ]; then
+        FALLBACK_GRADLE="$distribution_dir/bin/gradle"
+        return
+    fi
+
+    die "ERROR: Unable to locate Gradle executable after downloading distribution"
+}
+
+download_wrapper_jar
+
+if [ -n "$FALLBACK_GRADLE" ] && [ ! -s "$WRAPPER_JAR" ]; then
+    exec "$FALLBACK_GRADLE" "$@"
+fi
 
 
 # Determine the Java command to use to start the JVM.
@@ -210,11 +272,19 @@ DEFAULT_JVM_OPTS='"-Xmx64m" "-Xms64m"'
 #   * For example: A user cannot expect ${Hostname} to be expanded, as it is an environment variable and will be
 #     treated as '${Hostname}' itself on the command line.
 
-set -- \
-        "-Dorg.gradle.appname=$APP_BASE_NAME" \
-        -classpath "$CLASSPATH" \
-        -jar "$APP_HOME/gradle/wrapper/gradle-wrapper.jar" \
-        "$@"
+if [ -f "$WRAPPER_JAR" ]; then
+    set -- \
+            "-Dorg.gradle.appname=$APP_BASE_NAME" \
+            -classpath "$WRAPPER_JAR" \
+            -jar "$WRAPPER_JAR" \
+            "$@"
+else
+    set -- \
+            "-Dorg.gradle.appname=$APP_BASE_NAME" \
+            -classpath "$CLASSPATH" \
+            org.gradle.wrapper.GradleWrapperMain \
+            "$@"
+fi
 
 # Stop when "xargs" is not available.
 if ! command -v xargs >/dev/null 2>&1
